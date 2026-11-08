@@ -1,6 +1,7 @@
 """Batch 4: admin can't switch off the last usable ad network; 'postback never arrives' is detected and reported."""
 import asyncio
 import copy
+import time
 import unittest
 
 import observability
@@ -74,3 +75,42 @@ class PostbackMissingDetection(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LongPollVerify(unittest.TestCase):
+    """done() answers as soon as the postback lands instead of making the app poll every few seconds."""
+
+    def test_wait_is_short_and_client_polls_fast(self):
+        from ads import verify
+        d = verify.decide(verify.Facts(network="monetag", elapsed=30, client_completed=True, claim_age=1),
+                          verify.Policy(monetag_postback=True), False)
+        self.assertEqual((d.action, d.wait), ("wait", 1))
+        js = open("ads/adapters.js", encoding="utf-8").read()
+        self.assertIn("Math.min(r.wait, 3) * 1000 + 100", js)
+
+    def test_longpoll_default_is_bounded(self):
+        self.assertTrue(0 <= settings.VERIFY_LONGPOLL <= 15)
+
+
+from tests.test_ad_security import StrictBase  # noqa: E402
+
+
+class LongPollFlow(StrictBase):
+    async def test_claim_returns_as_soon_as_postback_lands(self):
+        service.D.long_poll = 5.0
+        a = await self.start(); await self.shown(a)
+        t0 = time.monotonic()
+        claim = asyncio.ensure_future(self.claim(a))
+        await asyncio.sleep(0.7)
+        self.assertEqual(await self.postback(a), (200, "ok"))
+        r = await asyncio.wait_for(claim, 3)
+        self.assertTrue(r["ok"] and r["delivered"], r)
+        self.assertLess(time.monotonic() - t0, 3)
+        self.assertEqual(self.sent, ["tok1"])
+
+    async def test_without_postback_it_still_never_unlocks(self):
+        service.D.long_poll = 1.0
+        a = await self.start(); await self.shown(a)
+        r = await self.claim(a)
+        self.assertTrue(r["ok"] and r.get("wait"), r)
+        self.assertEqual((self.sent, self.rewards()), ([], []))
