@@ -62,6 +62,8 @@ async def handle(query: Mapping, *, secret: str, store, ip: str = "?", fail_limi
     result = await store.record_postback(q, now=clock(), max_age=max_age, session_ttl=session_ttl,
                                          require_telegram_id=require_telegram_id)
     status = STATUS.get(result, 400)
+    if result in (OK, DUP):
+        observability.METRICS.gauge("postback.last_ok_at", int(clock()))
     if result == OK:
         observability.METRICS.inc("postback.accepted")
         slog.event("postback_accepted")                        # no ymid / user / zone: the counter is the evidence, not a user trail
