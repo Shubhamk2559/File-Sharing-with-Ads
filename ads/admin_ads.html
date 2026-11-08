@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Smart Monetization</title>
+<style>
+  :root {
+    --bg: #f2f4f6; --surface: #ffffff; --ink: #16212b; --muted: #5b6977; --line: #d9e0e6;
+    --monetag: #2f6fed; --tads: #12806b;
+    --ok: #12803f; --warn: #a8531a; --bad: #be3535; --focus: #2f6fed;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #11171d; --surface: #19212a; --ink: #e8eef3; --muted: #93a2b0; --line: #2b3641;
+            --monetag: #6f9bff; --tads: #3fc4a8; --ok: #52c783; --warn: #e89a61; --bad: #f07b7b; --focus: #6f9bff; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; font-variant-numeric: tabular-nums; }
+  header { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; padding: 14px 20px; background: var(--surface); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 2; }
+  header h1 { font-size: 17px; font-weight: 650; margin: 0 auto 0 0; letter-spacing: -.01em; }
+  main { max-width: 1120px; margin: 0 auto; padding: 20px; display: grid; gap: 22px; }
+  section { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 18px 20px; }
+  h2 { font-size: 15px; font-weight: 650; margin: 0 0 12px; }
+  p.note { color: var(--muted); font-size: 13px; margin: 6px 0 0; max-width: 72ch; }
+  input, select, button { font: inherit; color: inherit; }
+  input, select { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 9px; }
+  button { background: var(--ink); color: var(--surface); border: 0; border-radius: 6px; padding: 7px 14px; font-weight: 600; cursor: pointer; }
+  button.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+  button:disabled { opacity: .5; cursor: default; }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .lead { font-size: 20px; font-weight: 650; letter-spacing: -.015em; margin: 0 0 4px; }
+  .strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0; border-top: 1px solid var(--line); margin-top: 14px; }
+  .strip div { padding: 12px 14px 4px 0; }
+  .strip dt { color: var(--muted); font-size: 12.5px; }
+  .strip dd { margin: 0; font-size: 21px; font-weight: 650; letter-spacing: -.01em; }
+  .tag { display: inline-block; font-size: 11.5px; padding: 0 7px; border-radius: 10px; border: 1px solid var(--line); color: var(--muted); vertical-align: middle; margin-left: 4px; }
+  .tag.confirmed { border-color: var(--ok); color: var(--ok); }
+  .tag.estimate { border-style: dashed; border-color: var(--warn); color: var(--warn); }
+  .tablewrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; min-width: 760px; }
+  th, td { text-align: right; padding: 8px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  th { font-weight: 600; color: var(--muted); font-size: 12.5px; }
+  .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 7px; }
+  .st-healthy { color: var(--ok); } .st-degraded, .st-benched { color: var(--warn); } .st-not_configured { color: var(--bad); } .st-disabled, .st-idle { color: var(--muted); }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 22px; }
+  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin: 8px 0; }
+  .row label { display: inline-flex; align-items: center; gap: 6px; }
+  .chart { width: 100%; height: 240px; display: block; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--muted); margin-top: 6px; }
+  #msg { min-height: 20px; font-size: 13.5px; } #msg.err { color: var(--bad); } #msg.ok { color: var(--ok); }
+  .prio li { display: flex; align-items: center; gap: 8px; margin: 4px 0; } ol.prio { padding-left: 20px; margin: 6px 0; }
+  .empty { color: var(--muted); padding: 14px 0; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Smart Monetization</h1>
+  <label>Admin token <input id="token" type="password" autocomplete="off" size="22"></label>
+  <label>Window <select id="days"><option value="1">1 day</option><option value="7" selected>7 days</option><option value="14">14 days</option><option value="30">30 days</option><option value="90">90 days</option></select></label>
+  <button id="load">Load</button>
+</header>
+<main>
+  <div id="msg" role="status"></div>
+  <section id="summary" hidden>
+    <p class="lead" id="bestline"></p>
+    <p class="note" id="bestnote"></p>
+    <dl class="strip" id="kpis"></dl>
+  </section>
+  <section id="daily-sec" hidden>
+    <h2>Verified rewarded impressions per day</h2>
+    <svg class="chart" id="chart" role="img" aria-label="Daily verified impressions by network"></svg>
+    <div class="legend" id="legend"></div>
+    <p class="note" id="chartnote"></p>
+  </section>
+  <section id="earn-sec" hidden>
+    <h2>Earnings engine</h2>
+    <div id="hints"></div>
+    <p class="lead" id="earnline"></p>
+    <div class="tablewrap"><table id="earn"></table></div>
+    <p class="note">Value = what one verified impression is worth. <em>confirmed</em> = your entered revenue ÷ our verified impressions, <em>your figure</em> = the eCPM you typed under Networks, <em>assumed</em> = borrowed from the other networks (never higher). Traffic share is simulated from the live model; every eligible network keeps a small minimum so it keeps being tested.</p>
+  </section>
+  <section id="nets-sec" hidden>
+    <h2>Network comparison</h2>
+    <div class="tablewrap"><table id="nets"></table></div>
+    <p class="note">Fill = ads displayed ÷ requests. Completion = completion callbacks ÷ displayed. eCPM (confirmed) = revenue you entered ÷ our verified impressions on the same days. Estimated figures come from Monetag postbacks only and are not payouts. A dash means the number does not exist, not that it is zero.</p>
+  </section>
+  <div class="grid2" id="cfg-sec" hidden>
+    <section>
+      <h2>Routing</h2>
+      <div class="row"><strong>Mode</strong>
+        <label><input type="radio" name="mode" value="auto"> Automatic (performance)</label>
+        <label><input type="radio" name="mode" value="priority"> Fixed priority</label>
+        <label><input type="radio" name="mode" value="manual"> Manual</label></div>
+      <div class="row" id="manualrow"><label>Manual network <select id="manual"></select></label></div>
+      <div><strong>Priority order</strong> <span class="note">(used for fixed mode, cold start and ties)</span><ol class="prio" id="prio"></ol></div>
+      <div class="row"><label>Automatic strategy <select id="strategy"><option value="thompson">Max earnings (learns from revenue)</option><option value="weighted">Classic weighted score</option></select></label></div>
+      <div class="row"><label><input type="checkbox" id="fallback"> Fall back to the next network when an ad can't be shown</label></div>
+      <div class="row"><label>Max attempts <select id="maxatt"><option>1</option><option>2</option><option>3</option></select></label></div>
+      <p class="note">A fallback only happens if the previous network never displayed an ad. A user is never shown two rewarded ads for one request.</p>
+      <div class="row"><button id="save-routing">Save routing</button></div>
+    </section>
+    <section>
+      <h2>Networks</h2>
+      <div id="netcfg"></div>
+      <p class="note">Reward trust: <em>server_postback</em> is checked by the network's server callback. <em>client_attested</em> relies on the browser callback alone, so it stays off unless you allow it for that network.</p>
+      <div class="row"><button id="save-nets">Save networks</button></div>
+    </section>
+    <section>
+      <h2>Optimization</h2>
+      <div id="optcfg"></div>
+      <div class="row"><button id="save-opt">Save optimization</button></div>
+    </section>
+    <section>
+      <h2>Confirmed revenue</h2>
+      <p class="note">Copy the day's revenue from the network's own dashboard. Only this (never a client value) is treated as confirmed.</p>
+      <div class="row"><label>Day <input id="rv-day" type="date"></label>
+        <label>Network <select id="rv-net"></select></label>
+        <label>Revenue (USD) <input id="rv-usd" type="number" min="0" step="0.01" style="width:110px"></label>
+        <button id="rv-save">Save revenue</button></div>
+    </section>
+  </div>
+  <section id="rew-sec" hidden>
+    <h2>Latest verified rewards</h2>
+    <div class="tablewrap"><table id="rewards"></table></div>
+  </section>
+</main>
+<script>
+(function () {
+  "use strict";
+  var NETS = ["monetag", "tads"], COLORS = { monetag: "var(--monetag)", tads: "var(--tads)" };
+  var $ = function (id) { return document.getElementById(id); };
+  var token = "", cfg = null, prio = [];
+  try { token = sessionStorage.getItem("ads_admin_token") || ""; } catch (e) {}
+  $("token").value = token;
+
+  function el(tag, attrs, kids) {
+    var n = document.createElement(tag);
+    Object.keys(attrs || {}).forEach(function (k) { if (k === "text") n.textContent = attrs[k]; else if (k === "class") n.className = attrs[k]; else n.setAttribute(k, attrs[k]); });
+    (kids || []).forEach(function (c) { n.appendChild(c); });
+    return n;
+  }
+  function msg(t, cls) { var m = $("msg"); m.textContent = t || ""; m.className = cls || ""; }
+  function usd(v, d) { return v == null ? "—" : "$" + Number(v).toLocaleString(undefined, { minimumFractionDigits: d == null ? 2 : d, maximumFractionDigits: d == null ? 2 : d }); }
+  function pct(v) { return v == null ? "—" : Math.round(v * 100) + "%"; }
+  function num(v) { return v == null ? "—" : Number(v).toLocaleString(); }
+  function ago(ts) { if (!ts) return "never"; var s = Math.max(0, Date.now() / 1000 - ts); return s < 90 ? "just now" : s < 5400 ? Math.round(s / 60) + " min ago" : s < 172800 ? Math.round(s / 3600) + " h ago" : Math.round(s / 86400) + " d ago"; }
+
+  async function call(path, method, body) {
+    var r = await fetch(path, { method: method || "GET", headers: Object.assign({ Authorization: "Bearer " + token }, body ? { "Content-Type": "application/json" } : {}), body: body ? JSON.stringify(body) : undefined });
+    var data = null; try { data = await r.json(); } catch (e) {}
+    if (!r.ok) { var err = new Error((data && (data.errors || data.detail)) ? [].concat(data.errors || data.detail).join("; ") : "Request failed (" + r.status + ")"); err.status = r.status; throw err; }
+    return data;
+  }
+
+  function tag(kind, label) { return el("span", { class: "tag " + kind, text: label }); }
+
+  function renderSummary(rep) {
+    var t = rep.totals, best = rep.best, b = best.by_confirmed_ecpm;
+    $("bestline").textContent = b ? rep.networks[b].label + " pays best: " + usd(rep.networks[b].ecpm.confirmed_usd) + " confirmed eCPM" : "No confirmed eCPM yet";
+    $("bestnote").textContent = b ? (best.by_score && best.by_score !== b ? "The routing score currently leads with " + rep.networks[best.by_score].label + " because it also weighs fill, completion and errors." : "")
+      : "Enter each network's daily revenue below. Until then, routing relies on fill, completion and error rates" + (best.by_score ? " (leader: " + rep.networks[best.by_score].label + ")." : ".");
+    var k = $("kpis"); k.textContent = "";
+    [["Ad requests", num(t.requests)], ["Ads displayed", num(t.shown)], ["Verified rewarded impressions", num(t.verified)], ["Failed requests", num(t.failed)],
+     ["Completion rate", pct(t.completion_rate)], ["Fill rate", pct(t.fill_rate)],
+     ["Confirmed revenue", usd(t.confirmed_revenue_usd), "confirmed"], ["Overall eCPM", usd(t.overall_ecpm_confirmed_usd), "confirmed"],
+     ["Estimated revenue (Monetag)", usd(t.estimated_revenue_usd), "estimate"]].forEach(function (x) {
+      var dd = el("dd", { text: x[1] }); if (x[2]) dd.appendChild(tag(x[2], x[2]));
+      k.appendChild(el("div", {}, [el("dt", { text: x[0] }), dd]));
+    });
+    $("summary").hidden = false;
+  }
+
+  function renderChart(rep) {
+    var svg = $("chart"), W = 900, H = 240, pad = { l: 40, r: 10, t: 10, b: 28 }, days = rep.daily;
+    svg.setAttribute("viewBox", "0 0 " + W + " " + H); svg.textContent = "";
+    var ns = "http://www.w3.org/2000/svg";
+    function s(tag, a) { var n = document.createElementNS(ns, tag); Object.keys(a).forEach(function (k) { n.setAttribute(k, a[k]); }); return n; }
+    var max = Math.max(1, Math.max.apply(null, days.map(function (d) { return NETS.reduce(function (a, n) { return a + d.verified[n]; }, 0); })));
+    var step = Math.pow(10, Math.floor(Math.log10(max))), top = Math.ceil(max / step) * step, iw = W - pad.l - pad.r, ih = H - pad.t - pad.b, bw = Math.max(4, iw / days.length * 0.62);
+    [0, 0.5, 1].forEach(function (f) {
+      var y = pad.t + ih - ih * f;
+      svg.appendChild(s("line", { x1: pad.l, x2: W - pad.r, y1: y, y2: y, stroke: "var(--line)", "stroke-width": 1 }));
+      var t = s("text", { x: pad.l - 6, y: y + 4, "text-anchor": "end", "font-size": 11, fill: "var(--muted)" }); t.textContent = Math.round(top * f); svg.appendChild(t);
+    });
+    days.forEach(function (d, i) {
+      var x = pad.l + iw / days.length * (i + 0.5) - bw / 2, y = pad.t + ih;
+      NETS.forEach(function (n) {
+        var h = ih * d.verified[n] / top; if (!h) return; y -= h;
+        var r = s("rect", { x: x, y: y, width: bw, height: h, fill: COLORS[n] }); var tt = s("title", {}); tt.textContent = d.day + " " + rep.networks[n].label + ": " + d.verified[n]; r.appendChild(tt); svg.appendChild(r);
+      });
+      if (days.length <= 15 || i % Math.ceil(days.length / 10) === 0) {
+        var lb = s("text", { x: x + bw / 2, y: H - 8, "text-anchor": "middle", "font-size": 11, fill: "var(--muted)" }); lb.textContent = d.day.slice(5); svg.appendChild(lb);
+      }
+    });
+    var lg = $("legend"); lg.textContent = "";
+    NETS.forEach(function (n) { var sp = el("span", {}, [el("span", { class: "dot" }), document.createTextNode(rep.networks[n].label)]); sp.firstChild.style.background = COLORS[n]; lg.appendChild(sp); });
+    var any = days.some(function (d) { return NETS.some(function (n) { return d.verified[n]; }); });
+    $("chartnote").textContent = any ? "Bars are our own verified reward records. Revenue is not plotted unless you have entered it (see the table)." : "No verified impressions in this window yet.";
+    $("daily-sec").hidden = false;
+  }
+
+  function renderTable(rep) {
+    var cols = [["Network", null], ["Status", null], ["Requests", "requests"], ["Displayed", "shown"], ["Verified", "verified"], ["Today", "today_verified"], ["All-time", "total_verified"],
+      ["Fill", "fill_rate", pct], ["Completion", "completion_rate", pct], ["Failed", "failed"], ["Abandoned", "abandoned"],
+      ["Confirmed revenue", "rev_c"], ["eCPM confirmed", "ecpm_c"], ["eCPM est.", "ecpm_e"], ["Score", "score"], ["Last success", "last_success"], ["Reward trust", "trust"]];
+    var t = $("nets"); t.textContent = "";
+    t.appendChild(el("thead", {}, [el("tr", {}, cols.map(function (c) { return el("th", { text: c[0] }); }))]));
+    var tb = el("tbody");
+    NETS.forEach(function (n) {
+      var b = rep.networks[n], tr = el("tr");
+      var name = el("td", {}, [el("span", { class: "dot" }), document.createTextNode(b.label)]); name.firstChild.style.background = COLORS[n]; tr.appendChild(name);
+      var st = b.status.replace("_", " ") + (b.status === "benched" ? " (" + ago(b.benched_until).replace("ago", "") + ")" : "");
+      tr.appendChild(el("td", { class: "st-" + b.status, text: st }));
+      var vals = [num(b.requests), num(b.shown), num(b.verified), num(b.today_verified), num(b.total_verified), pct(b.fill_rate), pct(b.completion_rate), num(b.failed), num(b.abandoned),
+        usd(b.revenue.confirmed_usd), usd(b.ecpm.confirmed_usd), usd(b.ecpm.estimated_usd), b.score == null ? (b.measured ? "—" : "not enough data") : b.score.toFixed(3), b.last_success ? ago(b.last_success) : "never", b.trust];
+      vals.forEach(function (v, i) {
+        var td = el("td", { text: v });
+        if (i === 9 && b.revenue.confirmed_usd != null) td.appendChild(tag("confirmed", "confirmed"));
+        if (i === 11 && b.ecpm.estimated_usd != null) td.appendChild(tag("estimate", "estimate"));
+        tr.appendChild(td);
+      });
+      tb.appendChild(tr);
+    });
+    t.appendChild(tb); $("nets-sec").hidden = false;
+  }
+
+  var BASIS = { confirmed: "confirmed", owner: "your figure", monetag_estimate: "estimate", assumed: "assumed", none: "unknown", unavailable: "unknown" };
+  function renderEarnings(rep) {
+    var h = $("hints"); h.textContent = "";
+    (rep.hints || []).forEach(function (t) { h.appendChild(el("p", { class: "note", text: "💡 " + t })); });
+    var e = rep.earnings || {};
+    $("earnline").textContent = e.expected_per_1000_requests_usd == null ? "Expected earnings appear after the first optimizer run (every few minutes)."
+      : "Expected " + usd(e.expected_per_1000_requests_usd, 4) + " per 1,000 requests" + (e.uplift_pct != null ? " (" + (e.uplift_pct >= 0 ? "+" : "") + e.uplift_pct + "% vs splitting traffic equally)" : "") + ".";
+    var t = $("earn"); t.textContent = "";
+    var cols = ["Network", "Gets traffic?", "Value / 1000 imp.", "Value basis", "P(verified)", "Expected / 1000 req.", "Traffic share"];
+    t.appendChild(el("thead", {}, [el("tr", {}, cols.map(function (c) { return el("th", { text: c }); }))]));
+    var tb = el("tbody");
+    NETS.forEach(function (n) {
+      var b = rep.networks[n], x = b.expected || {}, tr = el("tr");
+      var name = el("td", {}, [el("span", { class: "dot" }), document.createTextNode(b.label)]); name.firstChild.style.background = COLORS[n]; tr.appendChild(name);
+      var ok = !b.blockers.length;
+      tr.appendChild(el("td", { class: ok ? "st-healthy" : "st-not_configured", text: ok ? (x.probation ? "yes (probation)" : "yes") : "no: " + b.blockers_text.join(", ") }));
+      tr.appendChild(el("td", { text: usd(x.value_per_1000_usd, 4) }));
+      var bt = el("td", { text: BASIS[x.basis] || "unknown" });
+      if (x.basis === "confirmed") bt.appendChild(tag("confirmed", "real"));
+      if (x.basis === "monetag_estimate" || x.basis === "owner") bt.appendChild(tag("estimate", "unmeasured"));
+      tr.appendChild(bt);
+      tr.appendChild(el("td", { text: pct(x.p_verified) }));
+      tr.appendChild(el("td", { text: usd(x.ev_per_1000_requests_usd, 4) }));
+      tr.appendChild(el("td", { text: x.share == null ? "—" : pct(x.share) }));
+      tb.appendChild(tr);
+    });
+    t.appendChild(tb); $("earn-sec").hidden = false;
+  }
+
+  function renderConfig(c) {
+    cfg = c; prio = c.priority.slice();
+    document.querySelectorAll('input[name="mode"]').forEach(function (r) { r.checked = r.value === c.mode; });
+    var man = $("manual"); man.textContent = ""; NETS.forEach(function (n) { var o = el("option", { value: n, text: n }); if (c.manual_network === n) o.selected = true; man.appendChild(o); });
+    $("strategy").value = c.strategy || "thompson";
+    $("fallback").checked = !!c.fallback_enabled; $("maxatt").value = String(c.max_attempts);
+    renderPrio();
+    var nc = $("netcfg"); nc.textContent = "";
+    NETS.forEach(function (n) {
+      var v = c.networks[n], idLabel = n === "tads" ? "Widget ID" : null;
+      var row = el("div", { class: "row" }, [el("strong", { text: n })]);
+      var en = el("input", { type: "checkbox", "data-net": n, "data-k": "enabled" }); en.checked = v.enabled; row.appendChild(el("label", {}, [en, document.createTextNode("Enabled")]));
+      var al = el("input", { type: "checkbox", "data-net": n, "data-k": "allow_client_reward" }); al.checked = v.allow_client_reward; row.appendChild(el("label", {}, [al, document.createTextNode("Allow client-attested rewards")]));
+      var ec = el("input", { type: "number", min: 0, step: "any", style: "width:90px", "data-net": n, "data-k": "ecpm_usd", placeholder: "optional" }); ec.value = v.ecpm_usd == null ? "" : v.ecpm_usd;
+      row.appendChild(el("label", {}, [document.createTextNode("Your eCPM $/1000 "), ec]));
+      if (idLabel) { var idi = el("input", { type: "text", size: 14, "data-net": n, "data-k": "unit_id", placeholder: idLabel + " (blank = use env)" }); idi.value = v.unit_id || ""; row.appendChild(el("label", {}, [document.createTextNode(idLabel + " "), idi])); }
+      nc.appendChild(row);
+    });
+    var oc = $("optcfg"); oc.textContent = "";
+    var o = c.optimization, defs = [["window_days", "Window (days)"], ["recent_hours", "Recent window (hours, max 48)"], ["min_requests", "Min requests before a network is ranked"], ["min_revenue_impressions", "Min impressions before revenue counts"],
+      ["explore_share", "Exploration share (0–0.5)"], ["cooldown_minutes", "Cooldown after failures (min)"], ["fail_threshold", "Failure rate that triggers cooldown"], ["fail_min_attempts", "Min attempts before cooldown can trigger"],
+      ["half_life_days", "Max-earnings: memory half-life (days)"], ["prior_strength", "Max-earnings: caution for new networks (pseudo-requests)"], ["min_share", "Max-earnings: minimum share per network (0–0.2)"], ["probation_share", "Max-earnings: share cap after a cooldown (0.01–0.5)"]];
+    defs.forEach(function (d) { var i = el("input", { type: "number", step: "any", style: "width:100px", "data-opt": d[0] }); i.value = o[d[0]]; oc.appendChild(el("div", { class: "row" }, [el("label", {}, [document.createTextNode(d[1] + " "), i])])); });
+    var ub = el("input", { type: "checkbox", "data-optb": "use_monetag_estimate" }); ub.checked = !!o.use_monetag_estimate;
+    oc.appendChild(el("div", { class: "row" }, [el("label", {}, [ub, document.createTextNode("Use Monetag's postback estimate as revenue when nothing else is known (an estimate, not a payout)")])]));
+    var wr = el("div", { class: "row" }, [el("strong", { text: "Classic score weights (weighted strategy only)" })]);
+    Object.keys(o.weights).forEach(function (k) { var i = el("input", { type: "number", min: 0, max: 1, step: "0.05", style: "width:70px", "data-w": k }); i.value = o.weights[k]; wr.appendChild(el("label", {}, [document.createTextNode(k + " "), i])); });
+    oc.appendChild(wr);
+    var rn = $("rv-net"); if (!rn.children.length) NETS.forEach(function (n) { rn.appendChild(el("option", { value: n, text: n })); });
+    $("manualrow").hidden = c.mode !== "manual"; $("cfg-sec").hidden = false;
+  }
+
+  function renderPrio() {
+    var ol = $("prio"); ol.textContent = "";
+    prio.forEach(function (n, i) {
+      var li = el("li", {}, [el("span", { text: n })]);
+      var up = el("button", { class: "ghost", type: "button", "aria-label": "Move " + n + " up", text: "Up" }); up.disabled = i === 0;
+      var dn = el("button", { class: "ghost", type: "button", "aria-label": "Move " + n + " down", text: "Down" }); dn.disabled = i === prio.length - 1;
+      up.onclick = function () { prio.splice(i - 1, 0, prio.splice(i, 1)[0]); renderPrio(); };
+      dn.onclick = function () { prio.splice(i + 1, 0, prio.splice(i, 1)[0]); renderPrio(); };
+      li.appendChild(up); li.appendChild(dn); ol.appendChild(li);
+    });
+  }
+
+  function renderRewards(list) {
+    var t = $("rewards"); t.textContent = "";
+    if (!list.length) { t.appendChild(el("tbody", {}, [el("tr", {}, [el("td", { class: "empty", text: "No verified rewards recorded yet." })])])); $("rew-sec").hidden = false; return; }
+    t.appendChild(el("thead", {}, [el("tr", {}, ["When", "Network", "Trust", "User", "Ad ID"].map(function (h) { return el("th", { text: h }); }))]));
+    t.appendChild(el("tbody", {}, list.map(function (r) { return el("tr", {}, [ago(r.t), r.network, r.trust, String(r.user_id), r.ad_id].map(function (v) { return el("td", { text: v }); })); })));
+    $("rew-sec").hidden = false;
+  }
+
+  async function load() {
+    token = $("token").value.trim(); if (!token) { msg("Enter the admin token.", "err"); return; }
+    try { sessionStorage.setItem("ads_admin_token", token); } catch (e) {}
+    msg("Loading…");
+    try {
+      var rep = await call("/admin/ads/api/overview?days=" + $("days").value);
+      renderSummary(rep); renderChart(rep); renderEarnings(rep); renderTable(rep); renderConfig(rep.config);
+      renderRewards((await call("/admin/ads/api/rewards?limit=25")).rewards);
+      msg("Updated " + new Date().toLocaleTimeString() + ". " + rep.notes[0], "");
+    } catch (e) { msg(e.status === 403 ? "Wrong token." : e.status === 404 ? "Admin API is disabled (set ADS_ADMIN_TOKEN)." : e.message, "err"); }
+  }
+
+  async function save(patch, label) {
+    try { var r = await call("/admin/ads/api/config", "POST", patch); renderConfig(r.config); msg(label + " saved.", "ok"); load(); }
+    catch (e) { msg(e.message, "err"); }
+  }
+
+  $("load").onclick = load;
+  document.querySelectorAll('input[name="mode"]').forEach(function (r) { r.onchange = function () { $("manualrow").hidden = r.value !== "manual"; }; });
+  $("save-routing").onclick = function () {
+    var mode = document.querySelector('input[name="mode"]:checked').value;
+    save({ mode: mode, manual_network: mode === "manual" ? $("manual").value : (cfg && cfg.manual_network) || null, priority: prio, strategy: $("strategy").value, fallback_enabled: $("fallback").checked, max_attempts: Number($("maxatt").value) }, "Routing");
+  };
+  $("save-nets").onclick = function () {
+    var p = { networks: {} };
+    document.querySelectorAll("[data-net]").forEach(function (i) {
+      var n = i.getAttribute("data-net"), k = i.getAttribute("data-k"); p.networks[n] = p.networks[n] || {};
+      p.networks[n][k] = i.type === "checkbox" ? i.checked : k === "ecpm_usd" ? (i.value.trim() === "" ? null : Number(i.value)) : i.value.trim();
+    });
+    NETS.forEach(function (n) { if (n === "monetag") delete p.networks[n].unit_id; });
+    save(p, "Networks");
+  };
+  $("save-opt").onclick = function () {
+    var o = { weights: {} };
+    document.querySelectorAll("[data-opt]").forEach(function (i) { o[i.getAttribute("data-opt")] = Number(i.value); });
+    document.querySelectorAll("[data-optb]").forEach(function (i) { o[i.getAttribute("data-optb")] = i.checked; });
+    document.querySelectorAll("[data-w]").forEach(function (i) { o.weights[i.getAttribute("data-w")] = Number(i.value); });
+    save({ optimization: o }, "Optimization");
+  };
+  $("rv-save").onclick = async function () {
+    try { await call("/admin/ads/api/revenue", "POST", { day: $("rv-day").value, network: $("rv-net").value, revenue_usd: Number($("rv-usd").value) }); msg("Revenue saved.", "ok"); load(); }
+    catch (e) { msg(e.message, "err"); }
+  };
+  if (token) load();
+})();
+</script>
+</body>
+</html>
