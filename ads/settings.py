@@ -132,6 +132,12 @@ def trust_allowed(cfg: dict, net: str) -> bool:
     return (not RUNTIME["strict"]) and bool(cfg["networks"][net]["allow_client_reward"])
 
 
+def servable_networks(cfg: dict) -> list:
+    """Networks that can actually receive traffic: enabled + configured + reward verification allowed (no cool-down logic)."""
+    return [n for n in NETWORKS
+            if cfg["networks"][n]["enabled"] and is_configured(cfg, n) and trust_allowed(cfg, n)]
+
+
 def validate_patch(patch: dict, current: dict) -> tuple[dict, list]:
     """Returns (new full config, errors). Pure; nothing is applied if errors is non-empty."""
     errors: list = []
@@ -226,4 +232,12 @@ def validate_patch(patch: dict, current: dict) -> tuple[dict, list]:
         errors.append(f"{NET_LABEL['tads']} cannot be enabled: set its widget ID first")
     if new["mode"] == "manual" and not new["manual_network"]:
         errors.append("manual mode needs manual_network")
+    # Never let the admin switch off the LAST network that can unlock files: every user would then get
+    # "No ad provider is available". (Fixing an already-broken config is still allowed.)
+    if servable_networks(current) and not servable_networks(new):
+        if RUNTIME["strict"]:
+            errors.append("cannot switch off the last usable ad network: Tads.me is not served in production (its views can't be "
+                          "verified server-side), so with Monetag off no user can get a file. Keep Monetag enabled.")
+        else:
+            errors.append("cannot switch off the last usable ad network: no other network would be left to serve ads.")
     return (current if errors else new), errors
