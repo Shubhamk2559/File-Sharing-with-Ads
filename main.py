@@ -300,7 +300,7 @@ _CFG = json.dumps(
         "probe": sorted(
             {engine.sdk_url(z) for z in engine.ZONES}
             | {engine.sdk_url(_DEFAULT_ZONE)}
-            | ({ads_settings.TADS_SDK_URL} if (ads_settings.SMART_ADS_ENABLED and ads_settings.TADS_WIDGET_ID and ads_settings.GATE_PROBE_TADS and not STRICT_ADS) else set())
+            | ({ads_settings.TADS_SDK_URL} if (ads_settings.SMART_ADS_ENABLED and ads_settings.TADS_WIDGET_ID and ads_settings.GATE_PROBE_TADS and ads_settings.TADS_ALLOW_CLIENT_REWARD) else set())
         ),
     }
 ).replace("</", "<\\/")
