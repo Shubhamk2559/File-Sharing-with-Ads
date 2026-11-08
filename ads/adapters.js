@@ -170,10 +170,10 @@
   }
 
   async function claim(state, res, api, sleep, maxTries) {
-    for (var i = 0; i < (maxTries || 40); i++) {
+    for (var i = 0; i < (maxTries || 60); i++) {
       var r = await api("/api/smart/done", { ad_id: state.ad_id, completed: true, non_valued: !!res.nonValued });
       if (!r || !r.wait) return r;
-      await sleep(r.wait * 1000 + 300);
+      await sleep(Math.min(r.wait, 3) * 1000 + 100);
     }
     return { ok: false, error: "We couldn't confirm the ad view. Please try again." };
   }
