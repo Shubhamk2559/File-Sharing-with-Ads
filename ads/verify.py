@@ -40,7 +40,7 @@ class Decision:
 
 def _wait_or_deny(f: Facts, pol: Policy, reason: str) -> Decision:
     if f.claim_age is None or f.claim_age < pol.wait_seconds:
-        return Decision("wait", reason="waiting_for_server_signal", wait=2)
+        return Decision("wait", reason="waiting_for_server_signal", wait=1)
     return Decision("deny", reason=reason)
 
 
