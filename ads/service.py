@@ -179,10 +179,12 @@ async def _note_unverified() -> None:
     obs = observability
     m = obs.METRICS
     m.inc("ads.unverified")
-    if m.get("postback.accepted") or m.get("postback.duplicate") or m.get("postback.rejected"):
-        return                                           # postbacks do arrive; this one was just late/missing
+    if m.get("postback.accepted") or m.get("postback.duplicate"):
+        return                                           # valid postbacks do arrive; this one was just late/missing
+    # Only ACCEPTED postbacks count: a manual browser test or a rejected one (wrong secret/user/zone) must not hide the problem.
     slog.event("postback_never_received", level="warning", unverified=m.get("ads.unverified"),
-               hint="Monetag has not called /api/monetag/postback since startup: set the zone Postback URL (KOYEB.md Step 1)")
+               rejected=m.get("postback.rejected"),
+               hint="No valid Monetag postback accepted since startup: check the Postback URL is SAVED in Monetag (KOYEB.md Step 1) and look for postback_rejected in the logs")
     if m.get("ads.unverified") == _UNVERIFIED_ALERT_AFTER:
         try:
             await obs.ALERTS.alert("postback_never_received",
