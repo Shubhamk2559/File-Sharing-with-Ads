@@ -9,6 +9,7 @@ displayed an ad, so a user is never shown two rewarded ads for one request.
 """
 from __future__ import annotations
 
+import asyncio
 import random
 import secrets
 import time
@@ -43,6 +44,7 @@ class Deps:
     sdk_url: Callable | None = None                 # zone -> url
     clock: Callable = time.time
     rng: Any = random
+    long_poll: float = 0.0                          # seconds done() may wait for the Monetag postback before answering {wait}
 
 
 D: Deps | None = None
@@ -216,20 +218,34 @@ async def done(s: dict, ad_id, completed: bool, non_valued: bool = False) -> dic
     started = s.get("ad_started_at")
     if not started:
         return {"ok": False, "error": "The ad didn't start. Please try again."}
-    now = D.clock()
-    facts = Facts(network=net, elapsed=now - started, client_completed=bool(ad.get("client_completed")),
-                  client_non_valued=bool(ad.get("client_non_valued")),
-                  claim_age=(now - ad["claimed_at"]) if ad.get("claimed_at") else None)
-    if net == "monetag" and pol.monetag_postback and D.monetag:
-        m = await D.monetag.get_ad(ad_id)
-        # the postback record must belong to THIS session, THIS user and the zone we issued the ad for
-        if not m or m.get("sid") != sid or m.get("user_id") != ad["user_id"] or str(m.get("zone")) != str(ad.get("zone")):
-            await store.finalize(ad_id, "denied", "unverified")
-            return {"ok": False, "error": _MSG["unverified"]}
-        facts.postback_seen, facts.postback_valued = bool(m.get("pb_seen")), bool(m.get("pb_valued"))
+    async def _decide():
+        now = D.clock()
+        facts = Facts(network=net, elapsed=now - started, client_completed=bool(ad.get("client_completed")),
+                      client_non_valued=bool(ad.get("client_non_valued")),
+                      claim_age=(now - ad["claimed_at"]) if ad.get("claimed_at") else None)
+        if net == "monetag" and pol.monetag_postback and D.monetag:
+            m = await D.monetag.get_ad(ad_id)
+            # the postback record must belong to THIS session, THIS user and the zone we issued the ad for
+            if not m or m.get("sid") != sid or m.get("user_id") != ad["user_id"] or str(m.get("zone")) != str(ad.get("zone")):
+                return None
+            facts.postback_seen, facts.postback_valued = bool(m.get("pb_seen")), bool(m.get("pb_valued"))
+        cfg = await engine.get_config()
+        return verify.decide(facts, pol, bool(cfg["networks"][net]["allow_client_reward"]))
 
-    cfg = await engine.get_config()
-    dec = verify.decide(facts, pol, bool(cfg["networks"][net]["allow_client_reward"]))
+    dec = await _decide()
+    if dec is None:
+        await store.finalize(ad_id, "denied", "unverified")
+        return {"ok": False, "error": _MSG["unverified"]}
+    # Fast path: hold the request open and re-check every 0.4 s, so the file is released right when the postback lands.
+    if dec.action == "wait" and dec.reason == "waiting_for_server_signal" and D.long_poll > 0:
+        deadline = time.monotonic() + D.long_poll
+        while dec.action == "wait" and dec.reason == "waiting_for_server_signal" and time.monotonic() < deadline:
+            await asyncio.sleep(0.4)
+            nd = await _decide()
+            if nd is None:
+                await store.finalize(ad_id, "denied", "unverified")
+                return {"ok": False, "error": _MSG["unverified"]}
+            dec = nd
     if dec.action == "wait":
         return {"ok": True, "wait": dec.wait}
     if dec.action == "deny":
