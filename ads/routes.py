@@ -308,7 +308,7 @@ async def h_admin_rewards(limit: int) -> dict:
 # ---------------------------------------------------------------- FastAPI wiring (thin)
 def register(app, *, auth, identify, send_file, db, token_re, telegram_errors, forbidden, policy, manager, ads_required,
              monetag_store=None, select_zone=None, sdk_url=None, country=None, clock=time.time, secret: str = "",
-             limiter=None) -> Ctx:
+             limiter=None, long_poll: float = 0.0) -> Ctx:
     from fastapi import Header, HTTPException, Request
     from fastapi.exception_handlers import request_validation_exception_handler
     from fastapi.exceptions import RequestValidationError
@@ -319,7 +319,7 @@ def register(app, *, auth, identify, send_file, db, token_re, telegram_errors, f
     engine.invalidate()                              # config cache embeds the strict-mode normalisation
     gate.configure(secret, clock)
     service.configure(service.Deps(sessions=db, policy=policy, monetag=monetag_store, select_zone=select_zone,
-                                   sdk_url=sdk_url, clock=clock))
+                                   sdk_url=sdk_url, clock=clock, long_poll=long_poll))
     ctx = Ctx(auth=auth, identify=identify, send_file=send_file, db=db, token_re=token_re, telegram_errors=telegram_errors,
               forbidden=forbidden, admin_token=settings.ADS_ADMIN_TOKEN,
               manager=manager, ads_required=ads_required, limiter=limiter)
