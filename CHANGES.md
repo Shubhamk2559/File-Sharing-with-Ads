@@ -1,6 +1,7 @@
 # Batch 4 - "No ad provider" + "couldn't confirm the ad view"
 * `ads/settings.py`: admin can no longer switch off the LAST usable ad network (in production that is Monetag; Tads.me is never served there) - clear error instead of every user getting "No ad provider is available".
 * `ads/service.py`, `ads/postback.py`: if users finish Monetag ads but NO postback has reached the server since startup, a `postback_never_received` warning is logged and ONE owner alert is sent (after 3 cases). `/admin/health` metrics get `postback.last_ok_at` and `ads.unverified`.
+* **Faster verification**: `done()` now long-polls (`VERIFY_LONGPOLL_SECONDS`, default 6): the server holds the request and answers the moment Monetag's postback lands; app polls every ~1 s (was ~4 s). Files: `ads/service.py`, `ads/settings.py`, `ads/routes.py`, `ads/verify.py`, `ads/adapters.js`, `main.py`, `_.env.example`.
 * Tests: `tests/test_batch4.py`. Root cause of "couldn't confirm" is the Monetag zone Postback URL (KOYEB.md Step 1), not code.
 
 ---
