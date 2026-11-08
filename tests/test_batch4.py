@@ -65,5 +65,12 @@ class PostbackMissingDetection(unittest.TestCase):
         self.assertEqual(self.alerts, [])
 
 
+    def test_manual_rejected_postback_does_not_hide_the_problem(self):
+        observability.METRICS.inc("postback.rejected")      # e.g. owner opened the URL in a browser with literal {macros}
+        for _ in range(3):
+            asyncio.run(service._note_unverified())
+        self.assertEqual(self.alerts, ["postback_never_received"])
+
+
 if __name__ == "__main__":
     unittest.main()
