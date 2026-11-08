@@ -385,6 +385,7 @@ if ads_settings.SMART_ADS_ENABLED:
         ),
         manager=manager,
         ads_required=ADS_REQUIRED,
+        long_poll=ads_settings.VERIFY_LONGPOLL,
         monetag_store=mstore,
         select_zone=engine.select_zone,
         sdk_url=engine.sdk_url,
