@@ -39,8 +39,9 @@ VERIFY_LONGPOLL = max(0.0, min(15.0, float(os.getenv("VERIFY_LONGPOLL_SECONDS", 
 TADS_WIDGET_ID = os.getenv("TADS_WIDGET_ID", "").strip()
 TADS_SDK_URL = os.getenv("TADS_SDK_URL", "https://w.tads.me/widget.js").strip()
 TADS_DEBUG = _bool("TADS_DEBUG", False)
-# Tads documents only browser callbacks (no postback). Honoured ONLY in development: in strict/production mode client-attested
-# rewards never unlock a file, so Tads is not served at all (see RUNTIME["strict"]).
+# Tads documents only browser callbacks (no postback), so its reward is "client attested". The OWNER decides whether that is
+# good enough to unlock a file: TADS_ALLOW_CLIENT_REWARD=true (default) lets Tads.me serve ads and unlock files in production too
+# (Monetag stays server-verified by postback). Set it to false to go back to "Monetag only".
 TADS_ALLOW_CLIENT_REWARD = _bool("TADS_ALLOW_CLIENT_REWARD", True)
 
 # ---- Ad gate: retries + ad-blocker check + "no ad available" grace ----
@@ -104,7 +105,9 @@ def merged(stored: dict | None) -> dict:
     for n in NETWORKS:
         cfg["networks"][n].update({k: v for k, v in (s.get("networks", {}).get(n) or {}).items() if k in cfg["networks"][n]})
         if RUNTIME["strict"]:
-            cfg["networks"][n]["allow_client_reward"] = False      # whatever is stored: strict mode never accepts client-only rewards
+            # strict mode never accepts client-only rewards, except Tads.me where the env flag is the owner's switch
+            # (it also overrides an old stored "false" that earlier versions wrote while Tads was blocked)
+            cfg["networks"][n]["allow_client_reward"] = bool(n == "tads" and TADS_ALLOW_CLIENT_REWARD)
     opt = s.get("optimization") or {}
     cfg["optimization"].update({k: v for k, v in opt.items() if k in cfg["optimization"] and k != "weights"})
     if isinstance(opt.get("weights"), dict):
@@ -133,6 +136,8 @@ def trust_for(net: str) -> str:
 def trust_allowed(cfg: dict, net: str) -> bool:
     if trust_for(net) != CLIENT_ATTESTED:
         return True
+    if net == "tads":                                   # owner opt-in (env) works in production as well
+        return TADS_ALLOW_CLIENT_REWARD and bool(cfg["networks"][net]["allow_client_reward"])
     return (not RUNTIME["strict"]) and bool(cfg["networks"][net]["allow_client_reward"])
 
 
@@ -189,7 +194,7 @@ def validate_patch(patch: dict, current: dict) -> tuple[dict, list]:
             errors.append(f"unknown network: {n}")
             continue
         for k, v in nv.items():
-            if k == "allow_client_reward" and v is True and RUNTIME["strict"]:
+            if k == "allow_client_reward" and v is True and RUNTIME["strict"] and not (n == "tads" and TADS_ALLOW_CLIENT_REWARD):
                 errors.append(f"networks.{n}.allow_client_reward: not allowed in strict mode (browser-only rewards can't be verified)")
             elif k in ("enabled", "allow_client_reward") and isinstance(v, bool):
                 new["networks"][n][k] = v
@@ -240,8 +245,8 @@ def validate_patch(patch: dict, current: dict) -> tuple[dict, list]:
     # "No ad provider is available". (Fixing an already-broken config is still allowed.)
     if servable_networks(current) and not servable_networks(new):
         if RUNTIME["strict"]:
-            errors.append("cannot switch off the last usable ad network: Tads.me is not served in production (its views can't be "
-                          "verified server-side), so with Monetag off no user can get a file. Keep Monetag enabled.")
+            errors.append("cannot switch off the last usable ad network: Tads.me is not usable (set TADS_WIDGET_ID and "
+                          "TADS_ALLOW_CLIENT_REWARD=true, and enable it), so with Monetag off no user can get a file. Keep Monetag enabled.")
         else:
             errors.append("cannot switch off the last usable ad network: no other network would be left to serve ads.")
     return (current if errors else new), errors
