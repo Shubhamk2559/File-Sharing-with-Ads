@@ -15,6 +15,7 @@ import time
 from dataclasses import dataclass
 from typing import Any, Callable
 
+import observability
 from . import engine, security, settings, slog, store, verify
 from .verify import Facts, Policy
 
@@ -169,6 +170,29 @@ async def report(s: dict, ad_id, event: str, reason=None, country=None) -> dict:
     return {"ok": True, "exhausted": True}
 
 
+_UNVERIFIED_ALERT_AFTER = 3
+
+
+async def _note_unverified() -> None:
+    """The user watched the ad but Monetag's postback never reached us. If NO postback at all has arrived since this instance
+    started, the Monetag zone's Postback URL is missing/wrong: say so loudly (log + one owner alert) instead of failing silently."""
+    obs = observability
+    m = obs.METRICS
+    m.inc("ads.unverified")
+    if m.get("postback.accepted") or m.get("postback.duplicate") or m.get("postback.rejected"):
+        return                                           # postbacks do arrive; this one was just late/missing
+    slog.event("postback_never_received", level="warning", unverified=m.get("ads.unverified"),
+               hint="Monetag has not called /api/monetag/postback since startup: set the zone Postback URL (KOYEB.md Step 1)")
+    if m.get("ads.unverified") == _UNVERIFIED_ALERT_AFTER:
+        try:
+            await obs.ALERTS.alert("postback_never_received",
+                                   "Users watch Monetag ads but NO postback has reached the server since startup, so nobody gets files. "
+                                   "Monetag -> your zone -> Postback URL is missing or wrong. Use the URL from KOYEB.md Step 1 "
+                                   "(BASE_URL must be this app's public https URL, secret = MONETAG_POSTBACK_SECRET).", severity="warning")
+        except Exception:  # noqa: BLE001
+            pass
+
+
 async def done(s: dict, ad_id, completed: bool, non_valued: bool = False) -> dict:
     """Never trusts the client for revenue/validity. Returns {ok, wait} | {ok False,error} | {ok, granted, s2, trust}."""
     if _session_expired(s):
@@ -215,6 +239,8 @@ async def done(s: dict, ad_id, completed: bool, non_valued: bool = False) -> dic
                 await D.monetag.record_fail(ad_id, sid, dec.reason)
             except Exception:  # noqa: BLE001
                 pass
+        if net == "monetag" and dec.reason == "unverified":
+            await _note_unverified()
         return {"ok": False, "error": _MSG.get(dec.reason, "Verification failed. Please try again.")}
 
     # ---- grant: exactly once (finalize + reward doc are both keyed by ad_id) ----
