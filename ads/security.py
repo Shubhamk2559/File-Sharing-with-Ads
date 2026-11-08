@@ -93,8 +93,9 @@ def resolve(env: Mapping) -> Security:
     warns = []
     if not production:
         warns.append(f"APP_ENV={app_env}: development profile. Browser-only (client-attested) rewards may unlock files. Do NOT use in production.")
-    if production and _bool(env, "TADS_ALLOW_CLIENT_REWARD", False):
-        warns.append("TADS_ALLOW_CLIENT_REWARD is ignored in production: Tads.me has no server-side verification, so it can't unlock files.")
+    if production and _bool(env, "TADS_ALLOW_CLIENT_REWARD", True):
+        warns.append("TADS_ALLOW_CLIENT_REWARD=true: Tads.me rewards are browser-attested (no server-side proof) but are accepted "
+                     "because you enabled it. Set TADS_ALLOW_CLIENT_REWARD=false for Monetag-only unlocking.")
     if not sec.require_telegram_id:
         warns.append("MONETAG_POSTBACK_REQUIRE_TELEGRAM_ID=false: postbacks without telegram_id are accepted (session binding still applies).")
     return Security(**{**sec.__dict__, "warnings": tuple(warns)})
