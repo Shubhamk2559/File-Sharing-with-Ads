@@ -61,6 +61,10 @@ def decide(f: Facts, pol: Policy, allow_client: bool) -> Decision:
     elif f.network != "tads":
         return Decision("deny", reason="unknown_network")
     # Reaching here means no server-side proof exists for this network (Tads.me, or Monetag without postback verification).
-    if pol.strict or not allow_client:
+    # Tads.me: the owner's explicit opt-in (allow_client, already normalised by settings.merged) decides, also in strict mode.
+    # Monetag without postback: strict mode never accepts a browser-only reward.
+    if f.network != "tads" and pol.strict:
+        return Decision("deny", reason="client_attested_not_allowed")
+    if not allow_client:
         return Decision("deny", reason="client_attested_not_allowed")
     return Decision("grant", CLIENT_ATTESTED, "client_callback")
