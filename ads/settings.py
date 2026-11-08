@@ -32,6 +32,10 @@ STATS_TZ_OFFSET_MIN = _int("STATS_TZ_OFFSET_MIN", 330)
 SESSION_TTL = _int("SESSION_TTL", 1800)                            # must equal config.SESSION_TTL (the Mongo TTL index on sessions.created)
 ATTEMPT_MAX_AGE = max(30, _int("AD_ATTEMPT_MAX_AGE", 600))         # an ad attempt can't be claimed/verified later than this after it was issued
 
+# Verification speed: while waiting for Monetag's postback the server holds the request open this many seconds and answers the
+# moment the postback arrives (instead of the app polling every ~4 s). 0 = off. Must stay below the client timeout (SAPI_TIMEOUT_MS).
+VERIFY_LONGPOLL = max(0.0, min(15.0, float(os.getenv("VERIFY_LONGPOLL_SECONDS", "6") or 0)))
+
 TADS_WIDGET_ID = os.getenv("TADS_WIDGET_ID", "").strip()
 TADS_SDK_URL = os.getenv("TADS_SDK_URL", "https://w.tads.me/widget.js").strip()
 TADS_DEBUG = _bool("TADS_DEBUG", False)
